@@ -89,14 +89,81 @@
             animation: blink 1.2s ease-in-out infinite;
         }
 
-        .live-dot.danger {
-            background: var(--red);
-            box-shadow: 0 0 8px var(--red);
+        /* Hide the live dot in rescue mode */
+        body.rescue-mode .live-dot,
+        body.rescue-mode #mode-label {
+            display: none;
         }
 
         @keyframes blink {
             0%,100% { opacity: 1; }
             50%      { opacity: 0.2; }
+        }
+
+        /* ── SOS Button ── */
+        .sos-btn {
+            display: none;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--yellow);
+            background: rgba(255, 215, 64, 0.12);
+            color: var(--yellow);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(255, 215, 64, 0.25);
+            animation: sos-pulse 1.8s ease-in-out infinite;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        @keyframes sos-pulse {
+            0%,100% { box-shadow: 0 0 10px rgba(255,215,64,0.25); }
+            50%      { box-shadow: 0 0 20px rgba(255,215,64,0.6); }
+        }
+
+        .sos-btn:hover {
+            background: rgba(255, 215, 64, 0.25);
+            box-shadow: 0 0 26px rgba(255, 215, 64, 0.7);
+        }
+
+        .sos-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            animation: none;
+        }
+
+        .sos-btn.sending {
+            animation: sos-spin 0.7s linear infinite;
+            border-style: dashed;
+        }
+
+        .sos-btn.confirmed {
+            background: rgba(255, 215, 64, 0.3);
+            box-shadow: 0 0 28px rgba(255, 215, 64, 0.8);
+            animation: none;
+        }
+
+        .sos-btn.error {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(255, 23, 68, 0.12);
+            box-shadow: 0 0 14px rgba(255, 23, 68, 0.4);
+            animation: none;
+        }
+
+        @keyframes sos-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        body.rescue-mode .sos-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* ── Mode Toggle Tabs ── */
@@ -603,8 +670,6 @@
             margin-top: 3px;
         }
 
-
-
         /* Reference warning */
         .ref-warning {
             font-family: 'Share Tech Mono', monospace;
@@ -725,6 +790,7 @@
     <div class="status-bar">
         <div class="live-dot" id="header-dot"></div>
         <span id="mode-label">LIVE MONITORING</span>
+        <button class="sos-btn" onclick="handleSOS()">SOS</button>
         <span id="clock">--:--:--</span>
     </div>
 </header>
@@ -890,7 +956,6 @@
             <div class="r-section">
                 <h3>Analysis Summary</h3>
 
-                <!-- ✅ NEW: analysis mode badge + reference warning -->
                 <div id="r-ref-warning" class="ref-warning"></div>
 
                 <div class="r-stats-grid">
@@ -915,7 +980,7 @@
                 <img id="r-result-img" alt="Annotated result" src=""/>
             </div>
 
-            <!-- ✅ FIXED: Victim markers table — matches new API fields (cx, cy) -->
+            <!-- Victim markers table -->
             <div class="r-section">
                 <h3>Predicted Victim Positions</h3>
                 <div style="overflow-x:auto">
@@ -957,8 +1022,6 @@ function setMode(mode) {
         body.classList.add('rescue-mode');
         tabN.classList.remove('active');
         tabR.classList.add('active');
-        dot.classList.add('danger');
-        lbl.textContent = 'EMERGENCY ACTIVE';
         if (window._refreshTimer) clearInterval(window._refreshTimer);
     } else {
         body.classList.remove('rescue-mode');
@@ -969,6 +1032,104 @@ function setMode(mode) {
         loadGrid();
         window._refreshTimer = setInterval(loadGrid, 5000);
     }
+}
+
+/* ─── SOS Handler ─────────────────────────────────────────────────── */
+async function handleSOS() {
+    const btn = document.querySelector('.sos-btn');
+    btn.disabled  = true;
+    btn.classList.add('sending');
+    btn.textContent = '…';
+
+    // Helper to reset button after a delay
+    function resetBtn(state, label, delay = 3000) {
+        btn.classList.remove('sending', 'confirmed', 'error');
+        btn.classList.add(state);
+        btn.textContent = label;
+        setTimeout(() => {
+            btn.classList.remove(state);
+            btn.textContent = 'SOS';
+            btn.disabled = false;
+        }, delay);
+    }
+
+    // Try to get GPS coords
+    function getLocation() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocation not supported'));
+            } else {
+                navigator.geolocation.getCurrentPosition(
+                    pos => resolve({
+                        latitude:  pos.coords.latitude,
+                        longitude: pos.coords.longitude,
+                        accuracy:  pos.coords.accuracy,
+                    }),
+                    err => reject(err),
+                    { enableHighAccuracy: true, timeout: 8000 }
+                );
+            }
+        });
+    }
+
+    let payload = { name: 'Rescue App User' };
+
+    try {
+        const loc = await getLocation();
+        payload.latitude  = loc.latitude;
+        payload.longitude = loc.longitude;
+        payload.accuracy  = loc.accuracy;
+    } catch (_) {
+        // GPS unavailable — send without coordinates; server will reject with 400
+        // but we still attempt so the backend log captures the attempt
+        payload.latitude  = null;
+        payload.longitude = null;
+        resetBtn('error', '✕', 4000);
+        showSOSToast('Could not get GPS location. Enable location access and try again.', true);
+        return;
+    }
+
+    try {
+        const res  = await fetch('/rescue/sos', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+            resetBtn('error', '✕', 4000);
+            showSOSToast('SOS failed: ' + (data.error || res.statusText), true);
+        } else {
+            resetBtn('confirmed', '✓', 5000);
+            showSOSToast('SOS sent! ID: ' + data.alert_id + ' — Help is on the way.', false);
+        }
+    } catch (e) {
+        resetBtn('error', '✕', 4000);
+        showSOSToast('Network error: ' + e.message, true);
+    }
+}
+
+function showSOSToast(msg, isError) {
+    let toast = document.getElementById('sos-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'sos-toast';
+        toast.style.cssText = `
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            font-family: 'Share Tech Mono', monospace; font-size: 0.72rem; letter-spacing: 1.5px;
+            padding: 10px 20px; border-radius: 4px; z-index: 99999;
+            transition: opacity 0.4s; pointer-events: none;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.style.background = isError ? 'rgba(255,23,68,0.12)'      : 'rgba(255,215,64,0.1)';
+    toast.style.border      = isError ? '1px solid var(--red)'       : '1px solid var(--yellow)';
+    toast.style.color       = isError ? 'var(--red)'                 : 'var(--yellow)';
+    toast.textContent       = msg;
+    toast.style.opacity     = '1';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 5000);
 }
 
 /* ─── Clock ───────────────────────────────────────────────────────── */
@@ -1201,14 +1362,10 @@ async function runRescueAnalysis() {
             return;
         }
 
-        // ── Populate stats ────────────────────────────────────────────────
         document.getElementById('r-ssim').textContent        = data.ssim_score ?? '—';
         document.getElementById('r-dmg').textContent         = (data.damage_percent ?? '—') + '%';
         document.getElementById('r-zones-count').textContent = (data.victim_zones ?? []).length;
 
-
-
-        // ── Reference warning ─────────────────────────────────────────────
         const refWarn = document.getElementById('r-ref-warning');
         if (data.reference_warning) {
             refWarn.textContent    = '⚠ ' + data.reference_warning;
@@ -1217,14 +1374,10 @@ async function runRescueAnalysis() {
             refWarn.style.display  = 'none';
         }
 
-        // ── Annotated image ───────────────────────────────────────────────
         const img = document.getElementById('r-result-img');
         img.src         = data.output_image_url + '?t=' + Date.now();
         img.style.display = 'block';
 
-        // ── ✅ FIXED: Victim markers table ────────────────────────────────
-        //    New API fields: id, cx, cy, confidence, centre_lat, centre_lon
-        //    Old fields area_px / x / y / w / h no longer exist — removed.
         const tbody = document.getElementById('r-zones-body');
         tbody.innerHTML = '';
 
