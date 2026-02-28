@@ -1,4 +1,4 @@
-# ALPROS - AI-Powered Landslide Risk Assessment System
+# ALPROS - Automatic Lanscape Prediction & Rescue Optimiztion System
 
 ALPROS is a comprehensive landslide risk prediction and monitoring system designed for Kerala's vulnerable regions. It combines classical statistical analysis with state-of-the-art machine learning to provide accurate, real-time landslide hazard assessments across micro-scale geographic zones.
 
