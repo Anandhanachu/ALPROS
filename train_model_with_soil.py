@@ -10,17 +10,25 @@ import joblib
 
 np.random.seed(42)
 
-samples = 2000
+samples = 3000
 
 rain_24h = np.random.uniform(0, 300, samples)      # mm
 rain_72h = np.random.uniform(0, 600, samples)
 slope = np.random.uniform(0, 1, samples)
 elevation = np.random.uniform(50, 500, samples)
 
-# Logical landslide condition
+# Soil factor (manual classification simulation)
+# 0.1 = rock, 0.4 = laterite, 0.8 = clay, 0.9 = weathered soil
+soil_factor = np.random.choice([0.1, 0.4, 0.8, 0.9], samples)
+
+# -----------------------------
+# 2️⃣ Logical Landslide Condition (More Realistic)
+# -----------------------------
+
 landslide = (
     (rain_72h > 350) &
-    (slope > 0.5)
+    (slope > 0.5) &
+    (soil_factor > 0.6)   # Weak soil increases failure
 ).astype(int)
 
 data = pd.DataFrame({
@@ -28,14 +36,15 @@ data = pd.DataFrame({
     "rain_72h": rain_72h,
     "slope": slope,
     "elevation": elevation,
+    "soil_factor": soil_factor,
     "landslide": landslide
 })
 
 # -----------------------------
-# 2️⃣ Train Model
+# 3️⃣ Train Model
 # -----------------------------
 
-X = data[["rain_24h", "rain_72h", "slope", "elevation"]]
+X = data[["rain_24h", "rain_72h", "slope", "elevation", "soil_factor"]]
 y = data["landslide"]
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -54,8 +63,19 @@ accuracy = model.score(X_test, y_test)
 print("Model Accuracy:", accuracy)
 
 # -----------------------------
-# 3️⃣ Save Model
+# 4️⃣ Feature Importance
+# -----------------------------
+
+feature_names = ["rain_24h", "rain_72h", "slope", "elevation", "soil_factor"]
+importances = model.feature_importances_
+
+print("\nFeature Importances:")
+for name, score in zip(feature_names, importances):
+    print(f"{name}: {round(score, 3)}")
+
+# -----------------------------
+# 5️⃣ Save Model
 # -----------------------------
 
 joblib.dump(model, "landslide_model.pkl")
-print("Model saved successfully.")
+print("\nModel saved successfully.")

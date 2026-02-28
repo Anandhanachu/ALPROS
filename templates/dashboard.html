@@ -1,19 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Kavalappara Micro-Zone Map</title>
+    <title>INNOBOT – AI Landslide Risk Map</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
     <style>
-        body { margin: 0; text-align: center; font-family: Arial; }
-        #map { height: 600px; width: 100%; }
-        h1 { margin: 20px; }
+        body {
+            margin: 0;
+            text-align: center;
+            font-family: Arial;
+        }
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        h1 {
+            margin: 20px;
+        }
     </style>
 </head>
+
 <body>
 
-<h1>🗺 Kavalappara Landslide Micro-Zones</h1>
+<h1>🗺 INNOBOT – Kavalappara AI Landslide Risk Map</h1>
 
 <div id="map"></div>
 
@@ -23,37 +33,69 @@
 
 var map = L.map('map').setView([10.953, 76.251], 14);
 
+// Base map
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// Fetch microzones
-fetch("/microzones")
-.then(response => response.json())
-.then(data => {
+let gridLayerGroup = L.layerGroup().addTo(map);
 
-    data.forEach(zone => {
+function loadGrid() {
 
-        var bounds = [
-            [zone.lat1, zone.lon1],
-            [zone.lat2, zone.lon2]
-        ];
+    fetch("/grid_risk")
+    .then(response => response.json())
+    .then(data => {
 
-        L.rectangle(bounds, {
-            color: "blue",
-            weight: 1,
-            fillOpacity: 0.1
-        })
-        .bindPopup(
-            "Micro-Zone: " + zone.zone_id +
-            "<br>Row: " + zone.row +
-            "<br>Column: " + zone.col
-        )
-        .addTo(map);
+        gridLayerGroup.clearLayers();
 
+        let zones = data.zones;
+        let dangerZone = data.most_dangerous;
+
+        zones.forEach(zone => {
+
+            let color = "green";
+
+            if (zone.status === "YELLOW") color = "orange";
+            if (zone.status === "RED") color = "red";
+
+            let weight = 1;
+
+            if (zone.zone_id === dangerZone) {
+                color = "darkred";
+                weight = 4;
+            }
+
+            let rectangle = L.rectangle([
+                [zone.lat1, zone.lon1],
+                [zone.lat2, zone.lon2]
+            ], {
+                color: color,
+                fillColor: color,
+                weight: weight,
+                fillOpacity: 0.4
+            });
+
+            rectangle.bindPopup(
+                `<b>Zone:</b> ${zone.zone_id}<br>
+                 <b>Risk:</b> ${zone.risk}<br>
+                 <b>Status:</b> ${zone.status}<br>
+                 <b>Elevation:</b> ${zone.elevation} m<br>
+                 <b>Slope:</b> ${zone.slope}<br>
+                 <b>Soil:</b> ${zone.soil_factor}<br>
+                 <b>Rainfall (1h):</b> ${zone.rainfall_1h} mm`
+            );
+
+            gridLayerGroup.addLayer(rectangle);
+        });
+
+    })
+    .catch(error => {
+        console.log("Error loading grid:", error);
     });
+}
 
-});
+loadGrid();
+setInterval(loadGrid, 5000);
 
 </script>
 
