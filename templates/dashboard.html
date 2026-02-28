@@ -1,103 +1,639 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>INNOBOT – AI Landslide Risk Map</title>
-
+    <title>ALPROS – Landslide Risk Monitor</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            --bg:        #0a0e14;
+            --panel:     #111720;
+            --border:    #1e2d3d;
+            --accent:    #00c8ff;
+            --accent2:   #ff4d4d;
+            --text:      #c9d4e0;
+            --dim:       #506070;
+            --green:     #00e676;
+            --yellow:    #ffd740;
+            --red:       #ff1744;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            margin: 0;
-            text-align: center;
-            font-family: Arial;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Rajdhani', sans-serif;
+            min-height: 100vh;
         }
+
+        /* ── Header ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 28px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: var(--accent);
+            clip-path: polygon(50% 0%,100% 38%,82% 100%,18% 100%,0% 38%);
+            animation: pulse 2.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.7; transform: scale(0.93); }
+        }
+
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 4px;
+            color: #fff;
+        }
+
+        .logo span {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--dim);
+            letter-spacing: 2px;
+            display: block;
+            margin-top: -2px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dim);
+        }
+
+        .live-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: blink 1.2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.2; }
+        }
+
+        /* ── Region Selector ── */
+        .region-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 28px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .region-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--dim);
+            letter-spacing: 2px;
+            margin-right: 6px;
+        }
+
+        .region-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            padding: 6px 16px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .region-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .region-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            box-shadow: 0 0 12px rgba(0,200,255,0.4);
+        }
+
+        /* ── Main Layout ── */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 260px;
+            gap: 0;
+            height: calc(100vh - 112px);
+        }
+
+        /* ── Map ── */
         #map {
-            height: 600px;
+            height: 100%;
             width: 100%;
+            border-right: 1px solid var(--border);
         }
-        h1 {
-            margin: 20px;
+
+        /* ── Sidebar ── */
+        .sidebar {
+            background: var(--panel);
+            overflow-y: auto;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+        .sidebar-section {
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 14px;
+        }
+
+        .sidebar-section h3 {
+            font-size: 0.65rem;
+            letter-spacing: 3px;
+            color: var(--dim);
+            font-family: 'Share Tech Mono', monospace;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        /* Region Info */
+        .region-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+
+        /* Risk Gauge */
+        .gauge-wrap {
+            text-align: center;
+        }
+
+        .gauge-value {
+            font-size: 2.8rem;
+            font-weight: 700;
+            font-family: 'Share Tech Mono', monospace;
+            line-height: 1;
+        }
+
+        .gauge-label {
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            color: var(--dim);
+            margin-top: 4px;
+        }
+
+        .gauge-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .gauge-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.6s ease, background 0.4s;
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 8px 10px;
+        }
+
+        .stat-box .val {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1rem;
+            color: #fff;
+        }
+
+        .stat-box .lbl {
+            font-size: 0.62rem;
+            letter-spacing: 1.5px;
+            color: var(--dim);
+            text-transform: uppercase;
+        }
+
+        /* Legend */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 0.82rem;
+        }
+
+        .legend-dot {
+            width: 12px; height: 12px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        /* Zone list */
+        .zone-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .zone-list::-webkit-scrollbar { width: 3px; }
+        .zone-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+        .zone-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            font-size: 0.78rem;
+        }
+
+        .zone-row.danger {
+            border-color: var(--red);
+            background: rgba(255,23,68,0.08);
+        }
+
+        .badge {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-weight: 600;
+        }
+
+        .badge.GREEN  { background: rgba(0,230,118,0.15); color: var(--green); }
+        .badge.YELLOW { background: rgba(255,215,64,0.15); color: var(--yellow); }
+        .badge.RED    { background: rgba(255,23,68,0.15);  color: var(--red); }
+
+        /* Last updated */
+        .last-updated {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--dim);
+            text-align: center;
+        }
+
+        /* Spinner overlay */
+        #spinner {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10,14,20,0.65);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #spinner.show { display: flex; }
+
+        .spin-ring {
+            width: 44px; height: 44px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 700px) {
+            .main { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+            #map  { height: 100%; }
+            .sidebar { max-height: 260px; }
         }
     </style>
 </head>
 
 <body>
 
-<h1>🗺 INNOBOT – Kavalappara AI Landslide Risk Map</h1>
+<!-- Spinner -->
+<div id="spinner"><div class="spin-ring"></div></div>
 
-<div id="map"></div>
+<!-- Header -->
+<header>
+    <div class="logo">
+        <div class="logo-icon"></div>
+        <div>
+            <h1>ALPROS</h1>
+            <span>AI LANDSLIDE PREDICTION &amp; RESPONSE SYSTEM</span>
+        </div>
+    </div>
+    <div class="status-bar">
+        <div class="live-dot"></div>
+        <span>LIVE MONITORING</span>
+        <span id="clock">--:--:--</span>
+    </div>
+</header>
+
+<!-- Region selector -->
+<div class="region-bar">
+    <span class="region-label">REGION //</span>
+    <button class="region-btn active" data-region="kavalappara">KAVALAPPARA</button>
+    <button class="region-btn" data-region="munnar">MUNNAR</button>
+    <button class="region-btn" data-region="wayanad">WAYANAD</button>
+    <button class="region-btn" data-region="malappuram">MALAPPURAM</button>
+</div>
+
+<!-- Main -->
+<div class="main">
+    <div id="map"></div>
+
+    <aside class="sidebar">
+
+        <!-- Region info -->
+        <div class="sidebar-section">
+            <h3>Active Region</h3>
+            <div class="region-name" id="region-name">KAVALAPPARA</div>
+            <div style="font-size:0.75rem; color:var(--dim);" id="region-coords">10.94°N – 76.23°E</div>
+        </div>
+
+        <!-- Max risk gauge -->
+        <div class="sidebar-section">
+            <h3>Peak Risk Score</h3>
+            <div class="gauge-wrap">
+                <div class="gauge-value" id="gauge-val" style="color: var(--green)">—</div>
+                <div class="gauge-label">PROBABILITY INDEX</div>
+                <div class="gauge-bar">
+                    <div class="gauge-fill" id="gauge-fill" style="width:0%; background: var(--green)"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="sidebar-section">
+            <h3>Zone Summary</h3>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="val" id="stat-green">—</div>
+                    <div class="lbl" style="color:var(--green)">GREEN</div>
+                </div>
+                <div class="stat-box">
+                    <div class="val" id="stat-yellow">—</div>
+                    <div class="lbl" style="color:var(--yellow)">YELLOW</div>
+                </div>
+                <div class="stat-box">
+                    <div class="val" id="stat-red">—</div>
+                    <div class="lbl" style="color:var(--red)">RED</div>
+                </div>
+                <div class="stat-box">
+                    <div class="val" id="stat-rain">—</div>
+                    <div class="lbl">RAIN mm/h</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zone list -->
+        <div class="sidebar-section">
+            <h3>Zone Index</h3>
+            <div class="zone-list" id="zone-list"></div>
+        </div>
+
+        <div class="last-updated" id="last-updated">LAST UPDATE: —</div>
+
+    </aside>
+</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-var map = L.map('map').setView([10.953, 76.251], 14);
+// ── Region centres for map view ──────────────────────────────────────
+const REGION_VIEWS = {
+    kavalappara: { center: [10.953, 76.251], zoom: 14 },
+    munnar:      { center: [10.080, 77.060], zoom: 14 },
+    wayanad:     { center: [11.620, 76.090], zoom: 14 },
+    malappuram:  { center: [11.100, 76.090], zoom: 14 },
+};
 
-// Base map
+// ── Map setup ─────────────────────────────────────────────────────────
+const map = L.map('map').setView([10.953, 76.251], 14);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-let gridLayerGroup = L.layerGroup().addTo(map);
+const gridLayerGroup = L.layerGroup().addTo(map);
 
+// ── State ─────────────────────────────────────────────────────────────
+let currentRegion = 'kavalappara';
+let refreshTimer  = null;
+
+// ── Clock ─────────────────────────────────────────────────────────────
+function updateClock() {
+    document.getElementById('clock').textContent =
+        new Date().toLocaleTimeString('en-GB');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Region buttons ────────────────────────────────────────────────────
+document.querySelectorAll('.region-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentRegion = btn.dataset.region;
+
+        // Fly map to new region
+        const v = REGION_VIEWS[currentRegion];
+        if (v) map.flyTo(v.center, v.zoom, { duration: 1.2 });
+
+        // Update sidebar label
+        document.getElementById('region-name').textContent = btn.textContent;
+
+        loadGrid();
+    });
+});
+
+// ── Load grid ─────────────────────────────────────────────────────────
 function loadGrid() {
+    document.getElementById('spinner').classList.add('show');
 
-    fetch("/grid_risk")
-    .then(response => response.json())
-    .then(data => {
-
-        gridLayerGroup.clearLayers();
-
-        let zones = data.zones;
-        let dangerZone = data.most_dangerous;
-
-        zones.forEach(zone => {
-
-            let color = "green";
-
-            if (zone.status === "YELLOW") color = "orange";
-            if (zone.status === "RED") color = "red";
-
-            let weight = 1;
-
-            if (zone.zone_id === dangerZone) {
-                color = "darkred";
-                weight = 4;
-            }
-
-            let rectangle = L.rectangle([
-                [zone.lat1, zone.lon1],
-                [zone.lat2, zone.lon2]
-            ], {
-                color: color,
-                fillColor: color,
-                weight: weight,
-                fillOpacity: 0.4
-            });
-
-            rectangle.bindPopup(
-                `<b>Zone:</b> ${zone.zone_id}<br>
-                 <b>Risk:</b> ${zone.risk}<br>
-                 <b>Status:</b> ${zone.status}<br>
-                 <b>Elevation:</b> ${zone.elevation} m<br>
-                 <b>Slope:</b> ${zone.slope}<br>
-                 <b>Soil:</b> ${zone.soil_factor}<br>
-                 <b>Rainfall (1h):</b> ${zone.rainfall_1h} mm`
-            );
-
-            gridLayerGroup.addLayer(rectangle);
+    fetch(`/grid_risk?region=${currentRegion}`)
+        .then(r => r.json())
+        .then(data => {
+            renderGrid(data);
+            updateSidebar(data);
+        })
+        .catch(err => console.error('Grid load error:', err))
+        .finally(() => {
+            document.getElementById('spinner').classList.remove('show');
         });
+}
 
-    })
-    .catch(error => {
-        console.log("Error loading grid:", error);
+// ── Render rectangles ─────────────────────────────────────────────────
+function renderGrid(data) {
+    gridLayerGroup.clearLayers();
+
+    const zones      = data.zones;
+    const dangerZone = data.most_dangerous;
+
+    zones.forEach(zone => {
+        const isDanger = zone.zone_id === dangerZone;
+
+        let fillColor = '#00e676';
+        if (zone.status === 'YELLOW') fillColor = '#ffd740';
+        if (zone.status === 'RED')    fillColor = '#ff1744';
+        if (isDanger)                 fillColor = '#8b0000';
+
+        const rect = L.rectangle(
+            [[zone.lat1, zone.lon1], [zone.lat2, zone.lon2]],
+            {
+                color:       isDanger ? '#ff1744' : fillColor,
+                fillColor:   fillColor,
+                weight:      isDanger ? 3 : 1,
+                fillOpacity: isDanger ? 0.6 : 0.4,
+            }
+        );
+
+        rect.bindPopup(`
+            <div style="font-family:'Rajdhani',sans-serif; min-width:160px;">
+                <div style="font-size:1rem;font-weight:700;margin-bottom:6px;">
+                    Zone ${zone.zone_id} ${isDanger ? '⚠️' : ''}
+                </div>
+                <table style="font-size:0.85rem;border-collapse:collapse;width:100%">
+                    <tr><td style="color:#888;padding:2px 0">Risk</td>
+                        <td style="font-weight:700">${zone.risk}</td></tr>
+                    <tr><td style="color:#888;padding:2px 0">Status</td>
+                        <td><b style="color:${statusColor(zone.status)}">${zone.status}</b></td></tr>
+                    <tr><td style="color:#888;padding:2px 0">Elevation</td>
+                        <td>${zone.elevation} m</td></tr>
+                    <tr><td style="color:#888;padding:2px 0">Slope</td>
+                        <td>${zone.slope}</td></tr>
+                    <tr><td style="color:#888;padding:2px 0">Soil</td>
+                        <td>${zone.soil_factor}</td></tr>
+                    <tr><td style="color:#888;padding:2px 0">Rain 1h</td>
+                        <td>${zone.rainfall_1h} mm</td></tr>
+                </table>
+            </div>
+        `);
+
+        gridLayerGroup.addLayer(rect);
     });
 }
 
+function statusColor(s) {
+    if (s === 'GREEN')  return '#00e676';
+    if (s === 'YELLOW') return '#ffd740';
+    return '#ff1744';
+}
+
+// ── Update sidebar ─────────────────────────────────────────────────────
+function updateSidebar(data) {
+    const zones = data.zones;
+
+    // Counts
+    const g = zones.filter(z => z.status === 'GREEN').length;
+    const y = zones.filter(z => z.status === 'YELLOW').length;
+    const r = zones.filter(z => z.status === 'RED').length;
+
+    document.getElementById('stat-green').textContent  = g;
+    document.getElementById('stat-yellow').textContent = y;
+    document.getElementById('stat-red').textContent    = r;
+
+    // Rainfall (from first zone)
+    const rain = zones[0]?.rainfall_1h ?? '—';
+    document.getElementById('stat-rain').textContent = rain;
+
+    // Peak risk
+    const maxRisk   = Math.max(...zones.map(z => z.risk));
+    const gaugeVal  = document.getElementById('gauge-val');
+    const gaugeFill = document.getElementById('gauge-fill');
+
+    gaugeVal.textContent = isFinite(maxRisk) ? maxRisk.toFixed(2) : '—';
+
+    let riskColor = 'var(--green)';
+    if (maxRisk >= 0.7) riskColor = 'var(--red)';
+    else if (maxRisk >= 0.4) riskColor = 'var(--yellow)';
+
+    gaugeVal.style.color    = riskColor;
+    gaugeFill.style.width   = (maxRisk * 100).toFixed(1) + '%';
+    gaugeFill.style.background = riskColor;
+
+    // Region coords
+    const dangerZone = zones.find(z => z.zone_id === data.most_dangerous);
+    if (dangerZone) {
+        const lat = ((dangerZone.lat1 + dangerZone.lat2) / 2).toFixed(3);
+        const lon = ((dangerZone.lon1 + dangerZone.lon2) / 2).toFixed(3);
+        document.getElementById('region-coords').textContent =
+            `${lat}°N – ${lon}°E`;
+    }
+
+    // Zone list
+    const list = document.getElementById('zone-list');
+    list.innerHTML = '';
+    // Sort by risk desc
+    [...zones].sort((a,b) => b.risk - a.risk).forEach(zone => {
+        const isDanger = zone.zone_id === data.most_dangerous;
+        const row = document.createElement('div');
+        row.className = 'zone-row' + (isDanger ? ' danger' : '');
+        row.innerHTML = `
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.72rem">
+                ${zone.zone_id}${isDanger ? ' ⚠' : ''}
+            </span>
+            <span class="badge ${zone.status}">${zone.risk.toFixed(2)}</span>
+        `;
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', () => {
+            const lat = (zone.lat1 + zone.lat2) / 2;
+            const lon = (zone.lon1 + zone.lon2) / 2;
+            map.setView([lat, lon], 16);
+        });
+        list.appendChild(row);
+    });
+
+    // Timestamp
+    document.getElementById('last-updated').textContent =
+        'LAST UPDATE: ' + new Date().toLocaleTimeString('en-GB');
+}
+
+// ── Auto-refresh every 5 s ────────────────────────────────────────────
 loadGrid();
 setInterval(loadGrid, 5000);
 
 </script>
-
 </body>
 </html>
