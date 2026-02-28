@@ -1,10 +1,12 @@
 from flask import Flask, jsonify, render_template, request
+from rescue import rescue_bp
 import numpy as np
 import requests
 import joblib
 import os
 
 app = Flask(__name__)
+app.register_blueprint(rescue_bp)
 
 # -----------------------------
 # 🔹 Load AI Model
