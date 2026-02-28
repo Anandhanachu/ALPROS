@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kavalappara Micro-Zone Map</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+    <style>
+        body { margin: 0; text-align: center; font-family: Arial; }
+        #map { height: 600px; width: 100%; }
+        h1 { margin: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>🗺 Kavalappara Landslide Micro-Zones</h1>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+var map = L.map('map').setView([10.953, 76.251], 14);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Fetch microzones
+fetch("/microzones")
+.then(response => response.json())
+.then(data => {
+
+    data.forEach(zone => {
+
+        var bounds = [
+            [zone.lat1, zone.lon1],
+            [zone.lat2, zone.lon2]
+        ];
+
+        L.rectangle(bounds, {
+            color: "blue",
+            weight: 1,
+            fillOpacity: 0.1
+        })
+        .bindPopup(
+            "Micro-Zone: " + zone.zone_id +
+            "<br>Row: " + zone.row +
+            "<br>Column: " + zone.col
+        )
+        .addTo(map);
+
+    });
+
+});
+
+</script>
+
+</body>
+</html>
